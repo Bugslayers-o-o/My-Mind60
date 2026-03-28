@@ -6,3 +6,7 @@ coverage/
 *.log
 .env*
 !.env.example
+mind-sathi-71fee-firebase-adminsdk-fbsvc-86bfdceda4.json
+__pycache__/
+*.pyc
+.venv/
