@@ -15,6 +15,7 @@ export default function Chat() {
   const [truthGap, setTruthGap] = useState<TruthGapResult | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false); // State for sidebar visibility
+  const [showCrisisInfo, setShowCrisisInfo] = useState(false); // New state for showing crisis info
   
   const scrollRef = useRef<HTMLDivElement>(null);
 
@@ -33,19 +34,24 @@ export default function Chat() {
     try {
       const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY! });
       
-      analyzeTruthGap(userMsg, ai);
+      const truthGapResult = await analyzeTruthGap(userMsg, ai); // Await the analysis
 
-      const response = await ai.models.generateContent({
-        model: "gemini-3-flash-preview",
-        contents: `
-          You are "Sathi", a compassionate mental health assistant. 
-          The user says: "${userMsg}"
-          Provide a supportive, empathetic response. Keep it brief and encouraging.
-          If the user seems in high distress, gently suggest professional help.
-        `
-      });
-      
-      setMessages(prev => [...prev, { role: 'ai', text: response.text || "I'm here for you." }]);
+      if (truthGapResult && truthGapResult.riskLevel === 'High' && truthGapResult.suggestedAction.includes('crisis resources')) {
+        setMessages(prev => [...prev, { role: 'ai', text: "It sounds like you're going through a lot right now. Please know that you're not alone and help is available. It's important to reach out to professionals who can provide immediate support. I'm here to listen, but I'm not a substitute for professional help in a crisis." }]);
+        setShowCrisisInfo(true); // Show crisis information
+      } else {
+        const response = await ai.models.generateContent({
+          model: "gemini-3-flash-preview",
+          contents: `
+            You are "Sathi", a compassionate mental health assistant. 
+            The user says: "${userMsg}"
+            Provide a supportive, empathetic response. Keep it brief and encouraging.
+            If the user seems in high distress, gently suggest professional help.
+          `
+        });
+        setMessages(prev => [...prev, { role: 'ai', text: response.text || "I'm here for you." }]);
+        setShowCrisisInfo(false); // Hide crisis information if not high risk
+      }
     } catch (error) {
       console.error("Chat Error:", error);
       setMessages(prev => [...prev, { role: 'ai', text: "I'm sorry, I'm having a bit of trouble connecting. But I'm still here for you." }]);
@@ -54,7 +60,7 @@ export default function Chat() {
     }
   };
 
-  const analyzeTruthGap = async (text: string, ai: GoogleGenAI) => {
+  const analyzeTruthGap = async (text: string, ai: GoogleGenAI): Promise<TruthGapResult | null> => {
     setIsAnalyzing(true);
     try {
       const response = await ai.models.generateContent({
@@ -65,6 +71,8 @@ export default function Chat() {
           User's observed behavior/context: "User is interacting with a mental health chatbot."
           
           Identify if there's a mismatch between what they say and how they might be feeling.
+          Crucially, identify if the user's message contains any harmful intent, self-harm ideation, or suicidal thoughts.
+          If harmful intent or suicidal thoughts are detected, set the Risk Level to "High" and the Suggested Action to "Immediately provide crisis resources and strongly advise seeking professional help."
           Provide:
           1. Risk Level (Low, Medium, High)
           2. Insight (Why is there a gap?)
@@ -79,8 +87,10 @@ export default function Chat() {
 
       const data = JSON.parse(response.text || "{}");
       setTruthGap(data);
+      return data;
     } catch (error) {
       console.error("Analysis Error:", error);
+      return null;
     } finally {
       setIsAnalyzing(false);
     }
@@ -243,6 +253,30 @@ export default function Chat() {
             )}
           </AnimatePresence>
         </div>
+
+        {showCrisisInfo && (
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="p-6 sm:p-8 rounded-[32px] bg-red-100 border border-red-300 text-red-800 space-y-4 relative overflow-hidden shadow-lg"
+          >
+            <div className="flex items-center gap-3">
+              <AlertCircle size={24} className="text-red-600" />
+              <h4 className="text-lg font-serif text-red-800">Immediate Danger Detected</h4>
+            </div>
+            <p className="text-[13px] leading-relaxed font-medium">
+              It sounds like you are in a difficult situation. Please reach out for immediate professional help.
+            </p>
+            <ul className="list-disc list-inside text-sm space-y-1">
+              <li>National Suicide Prevention Lifeline: 988</li>
+              <li>Crisis Text Line: Text HOME to 741741</li>
+              <li>Emergency Services: 911</li>
+            </ul>
+            <Link to="/professionals" className="block w-full py-4 bg-red-200 hover:bg-red-300 border border-red-400 backdrop-blur-md rounded-full text-center text-[13px] font-medium transition-all active:scale-95 text-red-900 shadow-sm mt-4">
+              Find a Professional
+            </Link>
+          </motion.div>
+        )}
 
         <div className="pt-8 border-t border-[#5A5A40]/10">
           <div className="p-6 sm:p-8 rounded-[32px] bg-gradient-to-br from-[#5A634A] to-[#4A4F3D] shadow-lg text-white space-y-5 relative overflow-hidden">
